@@ -1,0 +1,74 @@
+#    oStartOfOrders
+#    |               oStartOfPatterns
+#    |               |
+#    |   order       |   patterns  / -- line ---
+#    '-> 00 01 02    '-> 00 ------/ --- line  |  - pos = 3
+#        00 01 03        |_______|\ --- line ---
+#        04 05 02                  \ -- line
+#        06 07 03
+#                                  / -- line ---
+#                        01 ------/ --- line  |  - pos = 3
+#                        |_______|\ --- line ---
+#                                  \ -- line
+#                        ...
+#
+
+# constants
+kNumLinesInPattern	equ	32
+kNumBytesInLine		equ	5
+oNumChannels		equ	offset of field containing number of channels
+oStartOfOrders		equ	offset of field containing offset of first order
+oStartOfPatterns	equ	offset of field containing offset of first pattern
+
+# variables updated at song load
+aSong		dw	address at which song is loaded
+numChannels:	db	0
+
+# variables updated at play time
+state:		db	play/stop
+order:		dw	0
+pos:		db	0
+
+
+Init/reset song:
+	pos = 0
+	numChannels = [aSong + oNumChannels]
+	order = [aSong + oStartOfOrders] + aSong
+	if order == [aSong + oStartOfPatterns] + aSong:
+		the song is zero-length: quit now
+
+Play a line:
+	for channel=0; channel<numChannels; channel++:
+		pattern_num = [order + channel]
+		pattern = [aSong + oStartOfPatterns] + pattern_num*kNumLinesInPattern*kNumBytesInLine
+		line = [pattern + (pos * kNumBytesInLine)]
+		make channel play line
+		{
+			Stash line (channel)
+			Noteon (channel)	# (uses stashed current line of this channel)
+			#TODO left off here - should probably test as-is before adding detailed play goo
+		}
+
+	# move on to next line
+	pos += 1
+
+	# move on to next order if we're at the end of this one
+	if pos == kNumLinesInPattern:
+		pos = 0
+		order += kNumChannels
+
+		# loop to start of song if we're out of orders
+		if order == [aSong + oStartOfPatterns] + aSong:
+			order = [aSong + oStartOfOrders] + aSong
+
+Tick:
+	If state == playing:	
+		if ticks % speed == 0:
+			Play a line()
+
+		for channel=0; channel<numChannels; channel++:
+			Effects tick (channel)	# (uses stashed current line of this channel)
+			SpFx tick (channel)	# (ditto, figure this out later)
+			#TODO left off here - should probably test as-is before adding detailed play goo
+
+		ticks++
