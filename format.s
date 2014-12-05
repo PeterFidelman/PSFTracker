@@ -2,6 +2,8 @@ Magic:			db      'X'
 
 Version:		db	00h
 
+Channels:		db	09h
+
 Artist:			db      'P','e','t','e','r',' ','F','i'
 			db      'd','e','l','m','a','n',' ',' '
 
@@ -22,9 +24,9 @@ Instruments:		db      0FFh,0Fh,00h,00h,00h,00h,00h,00h,00h,00h,00h,00h
 SpFx:			; TODO
 
 Orders:			db	00h,01h,01h,01h,01h,01h,01h,01h,01h
+			; TODO - each pattern listed here probably needs a transposition byte too
 
-Patterns:		db	00h			;0
-			db	20h,00h,00h,00h,00h
+Patterns:		db	20h,00h,00h,00h,00h	;0
 			db	00h,00h,00h,00h,00h
 			db	00h,00h,00h,00h,00h
 			db	00h,00h,00h,00h,00h
@@ -56,8 +58,7 @@ Patterns:		db	00h			;0
 			db	00h,00h,00h,00h,00h
 			db	00h,00h,00h,00h,00h
 			db	00h,00h,00h,00h,00h
-			db	00h			;1
-			db	22h,00h,00h,00h,00h
+			db	22h,00h,00h,00h,00h	;1
 			db	00h,00h,00h,00h,00h
 			db	00h,00h,00h,00h,00h
 			db	00h,00h,00h,00h,00h
