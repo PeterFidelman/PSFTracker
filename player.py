@@ -22,9 +22,10 @@ f  = bytearray(fh.read())
 
 def main():
 	init_reset()
-	play_a_line()
-	play_a_line()
-	play_a_line()
+	while True:
+		play_a_line()
+		# let user hit key before continuing
+		dummy = raw_input()
 
 # init/reset song
 def init_reset():
@@ -37,16 +38,26 @@ def init_reset():
 	print hex(numChannels)
 
 def play_a_line():
-	print "pos %d:", pos
 	global numChannels, state, order, pos
+	print "pos %d:" % pos
 	for channel in range(0, numChannels):
 		pattern_num = f[order + channel]
 		pattern = f[aSong + oStartOfPatterns] + pattern_num*kNumLinesInPattern*kNumBytesInLine
 		line = f[pattern + (pos * kNumBytesInLine)]
 
-		print hex(pattern_num), hex(pattern), hex(line)
+		print "chan", hex(channel), "ptn", hex(pattern_num), "line", hex(line)
+	# move on to next line
 	pos += 1
 	print
+
+	# move on to next order if we're at the end of this one
+	if pos == kNumLinesInPattern:
+		pos = 0
+		order += numChannels
+
+		# loop to start of song if we're out of orders
+		if order == f[aSong + oStartOfPatterns] + aSong:
+			order = f[aSong + oStartOfOrders] + aSong
 
 # call main
 main()
