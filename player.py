@@ -1,6 +1,6 @@
 # constants
 kNumLinesInPattern	=	32
-kNumBytesInLine		=	5
+kNumBytesInLine		=	4
 oNumChannels		=	0x02	# offset of field containing number of channels
 oStartOfInstruments	=	0x23	# offset of field containing offset of first instrument
 oStartOfSpFx		=	0x25	# offset of field containing offset of first spfx

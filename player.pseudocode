@@ -42,12 +42,11 @@ Play a line:
 		pattern_num = [order + channel]
 		pattern = [aSong + oStartOfPatterns] + pattern_num*kNumLinesInPattern*kNumBytesInLine
 		line = [pattern + (pos * kNumBytesInLine)]
-		make channel play line
-		{
-			Stash line (channel)
-			Noteon (channel)	# (uses stashed current line of this channel)
-			#TODO left off here - should probably test as-is before adding detailed play goo
-		}
+		make channel play line:
+			if there is a note here:
+				Stash line (channel)
+				Noteon (channel)	# (uses stashed current line of this channel)
+				#TODO left off here - test as-is before adding detailed play goo
 
 	# move on to next line
 	pos += 1
