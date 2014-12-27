@@ -4,33 +4,10 @@
 ; ----- Constants for the file format -----
 kNumLinesInPattern	equ	32
 kNumLinesInPatternShift	equ	5		; (1<<5) == 32
-kNumBytesInLine		equ	4
-kNumBytesInLineShift	equ	2		; (1<<2) == 4
-koNumChannels		equ	0x02		; Offsets of fields in header
-koStartOfInstruments	equ	0x23
-koStartOfOrders		equ	0x25
-koStartOfSpFx		equ	0x27
-koStartOfPatterns	equ	0x29
-
-; ----- Constants for the instrument format -----
-koCarrier		equ	0
-koModulator		equ	5
-
-koMisc			equ	0		; Per-operator
-koKSLVol		equ	1
-koAD			equ	2
-koSR			equ	3
-koWaveform		equ	4
-
-koFeedback		equ	10		; Per-instrument
-koA			equ	11
-koB			equ	12
-koC			equ	13
-koD			equ	14
-koE			equ	15
-
-kNumBytesInInstr	equ	16
-kNumBytesInInstrShift	equ	4		; (1 << 4) == 16
+kNumBytesInLine		equ	3
+koStartOfOrders		equ	0x22		; Offsets of fields in header
+koStartOfSpFx		equ	0x24
+koStartOfPatterns	equ	0x26
 
 ; ----- Constants for sizing virtual registers structure -----
 kMaxChannels		equ	1
@@ -38,10 +15,6 @@ kMaxChannels		equ	1
 koNote			equ	0
 koCoarse		equ	1
 koFine			equ	2
-koCarrierBaseVol	equ	4
-koCarrierExtraVol	equ	5
-koModulatorBaseVol	equ	6
-koModulatorExtraVol	equ	7
 ;kNumVRegsInChannel	equ	8
 kNumVRegsInChannelShift	equ	3		; (1 << 3) == 8
 
@@ -64,7 +37,6 @@ incSong:
 
 ; ----- Variables updated at song load -----
 aSong			dw	0x0000		; Address where song is loaded
-numChannels		db	0x01
 
 ; ----- Variables updated during playback ----
 ; Global
@@ -77,9 +49,6 @@ speed			db	0x06
 ; ----- Player API -----
 reset:
 			mov	bx,[aSong]
-			; Update the number of channels
-			mov	ah,[bx + koNumChannels]
-			mov	[numChannels],ah
 			; Go to the beginning of the song
 			mov	ax,[bx + koStartOfOrders]
 			cmp	ax,[bx + koStartOfPatterns]	; No orders?
@@ -114,27 +83,26 @@ tick:
 
 ; ----- Traversing the song -----
 getLine:
-			xor	ecx,ecx
-			mov	cl,[numChannels]
-.updateChannel:
-			dec	cx
-			; Use (order, channel, pos) to find the appropriate line
+			; Use (order, pos) to find the appropriate line
 			mov	bx,[aOrder]
-			mov	si,cx
-			movzx	dx,byte [bx+si]	; dx = pattern number
-			shl	dx,(kNumLinesInPatternShift + kNumBytesInLineShift)
+			movzx	dx,byte [bx]	; dx = pattern number
+
+			shl	dx,kNumLinesInPatternShift
+			mov	si,dx
+			shl	dx,1			; x2...
+			add	dx,si			; x3 bytes per line
 			mov	bx,[aSong]
 			add	bx,[bx+koStartOfPatterns]
 			add	bx,dx		; bx = pattern start address
 			movzx	dx,byte [pos]
-			shl	dx,kNumBytesInLineShift
+			mov	si,dx
+			shl	dx,1			; x2...
+			add	dx,si			; x3 bytes per line
 			add	bx,dx		; bx = line start address
 			; make channel play line
 			call	applyNote
 			;call	applyVol
 			;call	applyInstr
-			and	cx,cx
-			jnz	.updateChannel
 .goToNextLine:
 			; advance to next line
 			inc	byte [pos]
@@ -142,8 +110,7 @@ getLine:
 			jb	.ok
 			; advance to line 0 of next order
 			mov	byte [pos],0x00
-			movzx	ax,byte [numChannels]
-			add	word [aOrder], ax
+			inc	word [aOrder]	; advance #ch (1) to next order
 			; at end of orders?
 			mov	bx,[aSong]
 			add	bx,[bx+koStartOfPatterns]
@@ -157,8 +124,10 @@ getLine:
 
 ; ----- Parsing pattern lines into registers -----
 
-; Semantics:  Apply pattern line starting at address BX to channel CX.  Don't modify either register.
-applyNote:		push	cx
+; Semantics:  Apply pattern line starting at address BX.
+;	      Don't modify this register.
+;	      Because there's only 1 channel, CX is fair game.
+applyNote:
 			; Get note from line
 			movzx	si,[bx]
 			; Check for new note
@@ -168,7 +137,6 @@ applyNote:		push	cx
 			cmp	si,0x007f
 			jne	.notNoteOff
 			call	spkr_Off
-			pop	cx
 			ret
 .notNoteOff:
 			xor	cx,cx
@@ -184,8 +152,7 @@ applyNote:		push	cx
 			shr	ax,cl			; octave
 			call	spkr_SetFreq
 			call	spkr_On
-.notNew:		pop	cx
-			ret
+.notNew:		ret
 
 applyEffect:		ret
 applySpFx:		ret
