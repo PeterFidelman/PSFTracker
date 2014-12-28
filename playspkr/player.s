@@ -66,19 +66,23 @@ reset:
 
 tick:
 			; Playing?
-			mov	ah,[playing]
-			and	ah,ah
+			mov	al,[playing]
+			and	al,al
 			jz	.done			; ...no? Bye.
 			; Time for next line?
-			mov	ah,[ticks]
-			cmp	ah,[speed]
+			mov	al,[speed]
+			dec	al
+			cmp	[ticks],al
 			jb	.notyet
 			call	getLine
 			mov	byte [ticks],0xFF	; tick=(-1)
-.notyet:		; Apply fx
-			inc	byte [ticks]		; tick++
-			;call	applyEffect		; TODO
+.notyet:		inc	byte [ticks]		; tick++
+			; apply FX
+.apply:			call	applyEffect		; TODO
 			;call	applySpFx		; TODO
+			call	applyVRegs
+			movzx	ax,byte [ticks]		; DEBUG
+			call	printAx			; DEBUG
 .done:			ret
 
 ; ----- Traversing the song -----
@@ -99,10 +103,8 @@ getLine:
 			shl	dx,1			; x2...
 			add	dx,si			; x3 bytes per line
 			add	bx,dx		; bx = line start address
-			; make channel play line
+			; update virtual registers and NoteOff
 			call	applyNote
-			;call	applyVol
-			;call	applyInstr
 .goToNextLine:
 			; advance to next line
 			inc	byte [pos]
@@ -112,14 +114,14 @@ getLine:
 			mov	byte [pos],0x00
 			inc	word [aOrder]	; advance #ch (1) to next order
 			; at end of orders?
-			mov	bx,[aSong]
-			add	bx,[bx+koStartOfPatterns]
-			cmp	word [aOrder],bx
+			mov	bp,[aSong]
+			add	bp,[bp+koStartOfPatterns]
+			cmp	word [aOrder],bp
 			jb	.ok
 			; ...if so, loop to the first order
-			mov	bx,[aSong]
-			add	bx,[bx+koStartOfOrders]
-			mov	word [aOrder],bx
+			mov	bp,[aSong]
+			add	bp,[bp+koStartOfOrders]
+			mov	word [aOrder],bp
 .ok:			ret
 
 ; ----- Parsing pattern lines into registers -----
@@ -129,17 +131,27 @@ getLine:
 ;	      Because there's only 1 channel, CX is fair game.
 applyNote:
 			; Get note from line
-			movzx	si,[bx]
+			movzx	ax,[bx]
 			; Check for new note
-			btr	si,7
+			btr	ax,7
 			jnc	.notNew
 			; Check for note-off
-			cmp	si,0x007f
+			cmp	ax,0x007f
 			jne	.notNoteOff
 			call	spkr_Off
 			ret
 .notNoteOff:
+			mov	[vrNote],al
+			mov	byte [vrCoarse],0x00
+			mov	word [vrFine],0x0000
+			call	spkr_On
+.notNew:		ret
+
+; Ditto
+applyVRegs:
 			xor	cx,cx
+			movzx	si,byte [vrNote]
+			add	si,word [vrCoarse]	; coarse tune
 .normalizeFreq:
 			cmp	si,0x000c
 			jb	.doneNormalizing
@@ -150,12 +162,81 @@ applyNote:
 			shl	si,1
 			mov	ax,[freqTable+si]	; note
 			shr	ax,cl			; octave
+			add	ax,word [vrFine]	; fine tune
 			call	spkr_SetFreq
-			call	spkr_On
-.notNew:		ret
+			ret
 
-applyEffect:		ret
+applyEffect:		mov	ax,[bx+1]		; al=cmd, ah=param
+			movzx	si,al
+			cmp	si,0xF
+			je	.cmdF
+			shl	si,1
+			jmp	[.jumpTab+si]
+.jumpTab		dw	.cmd0	; 0 - ARP
+			dw	.cmd1	; 1 - SLIDE UP
+			dw	.cmd2	; 2 - SLIDE DOWN
+			dw	.cmd3	; 3 - SLIDE TO NOTE
+			dw	.cmd4	; 4 - VIBRATO
+			dw	.bail	; 5 - ---
+			dw	.bail	; 6 - ---
+			dw	.bail	; 7 - ---
+			dw	.bail	; 8 - ---
+			dw	.bail	; 9 - ---
+			dw	.bail	; A - ---
+			dw	.cmdB	; B - POSITION JUMP
+			dw	.cmdC	; C - FINE NOTE CUT
+			dw	.cmdD	; D - PATTERN BREAK
+			dw	.bail	; E - ---
+			dw	.cmdF	; F - SPEED
+.cmd0:			; 0 - ARP
+			;and	ah,ah
+			;jz	.bail		; 000 is nop
+			mov	dx,ax
+			movzx	ax,byte [ticks]
+			mov	cl,3
+			div	cl		; ah = remainder = arp pos
+			mov	ch,ah		; ch = remainder = arp pos
+			mov	cl,2
+			sub	cl,ch
+			shl	cl,2
+			shr	dx,8
+			shr	dl,cl		; dl = param >> 4*(2-arpPos)
+			and	dl,0x0F		; last nybble only, please
+			mov	[vrCoarse],dx
+			ret
+.cmd1:			; 1 - SLIDE UP
+			movzx	ax,ah
+			shl	ax,2	; calibrate slide to be more noticable
+			sub	[vrFine],ax
+			ret
+.cmd2:			; 2 - SLIDE DOWN
+			movzx	ax,ah
+			shl	ax,2	; calibrate slide to be more noticable
+			add	[vrFine],ax
+			ret
+.cmd3:			; 3 - SLIDE TO NOTE
+			ret
+.cmd4:			; 4 - VIBRATO
+			ret
+.cmdB:			; B - POSITION JUMP
+			ret
+.cmdC:			; C - FINE NOTE CUT
+			cmp	ah,[ticks]
+			jne	.bail
+			call	spkr_Off
+			ret
+.cmdD:			; D - PATTERN BREAK
+			ret
+.cmdF:			; F - SPEED
+			movzx	ax,ah
+			mov	[speed],ax
+.bail:			ret
+
 applySpFx:		ret
+
+vrNote:			times 1	db	0x00
+vrCoarse:		times 1	dw	0x0000
+vrFine:			times 1	dw	0x0000
 
 ;----- Hardware writes -----
 ; Set PIT2 to "frequency" AX
