@@ -40,6 +40,9 @@ keyboardHandler:
 			je	.left
 			cmp	al,'l'
 			je	.right
+			; was it the noteon toggle?
+			cmp	al,' '
+			je	.noteonToggle
 			; was it a hex digit?
 			xor	bx,bx
 .tryNextHigit:		cmp	al,[higits+bx]
@@ -62,6 +65,10 @@ keyboardHandler:
 			ret
 .returnQuit:
 			mov	ax,0xFFFF	; AX!=0 means QUIT!
+			ret
+.noteonToggle:
+			xor	byte [registers+0xB],0x20
+			xor	ax,ax
 			ret
 .hexFound:
 			; digit in bx
@@ -147,19 +154,19 @@ setRegister:
 			ret
 
 ; For debugging
-printAx:		push	cx
-			mov	cx,4
-.printDigit:		rol	ax,4
-			push	ax
-			movzx	eax,al
-			and	al,0xf
-			mov	al,[eax+higits]
-			mov	ah,0Eh
-			int	10h
-			pop	ax
-			loop	.printDigit
-			pop	cx
-			ret
+;printAx:		push	cx
+;			mov	cx,4
+;.printDigit:		rol	ax,4
+;			push	ax
+;			movzx	eax,al
+;			and	al,0xf
+;			mov	al,[eax+higits]
+;			mov	ah,0Eh
+;			int	10h
+;			pop	ax
+;			loop	.printDigit
+;			pop	cx
+;			ret
 
 higits:			db	'0','1','2','3','4','5','6','7'
 			db	'8','9','a','b','c','d','e','f'
