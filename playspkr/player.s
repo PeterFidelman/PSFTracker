@@ -70,19 +70,17 @@ tick:
 			and	al,al
 			jz	.done			; ...no? Bye.
 			; Time for next line?
-			mov	al,[speed]
-			dec	al
-			cmp	[ticks],al
+			mov	al,byte [ticks]
+			inc	al
+			cmp	al,byte [speed]
 			jb	.notyet
 			call	getLine
-			mov	byte [ticks],0xFF	; tick=(-1)
-.notyet:		inc	byte [ticks]		; tick++
+			xor	al,al
+.notyet:		mov	byte[ticks],al
 			; apply FX
-.apply:			call	applyEffect		; TODO
-			;call	applySpFx		; TODO
+.apply:			call	applyEffect
+			call	applySpFx
 			call	applyVRegs
-			movzx	ax,byte [ticks]		; DEBUG
-			call	printAx			; DEBUG
 .done:			ret
 
 ; ----- Traversing the song -----
