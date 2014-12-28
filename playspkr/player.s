@@ -10,13 +10,9 @@ koStartOfSpFx		equ	0x24
 koStartOfPatterns	equ	0x26
 
 ; ----- Constants for sizing virtual registers structure -----
-kMaxChannels		equ	1
-
 koNote			equ	0
 koCoarse		equ	1
 koFine			equ	2
-;kNumVRegsInChannel	equ	8
-kNumVRegsInChannelShift	equ	3		; (1 << 3) == 8
 
 ; ---------------------------------------------------------------------------
 ; Memory Image
@@ -166,8 +162,6 @@ applyVRegs:
 
 applyEffect:		mov	ax,[bx+1]		; al=cmd, ah=param
 			movzx	si,al
-			cmp	si,0xF
-			je	.cmdF
 			shl	si,1
 			jmp	[.jumpTab+si]
 .jumpTab		dw	.cmd0	; 0 - ARP
