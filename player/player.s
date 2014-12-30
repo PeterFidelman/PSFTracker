@@ -42,12 +42,11 @@ koCarrierBaseVol	equ	4
 koCarrierExtraVol	equ	5
 koModulatorBaseVol	equ	6
 koModulatorExtraVol	equ	7
-;kNumVRegsInChannel	equ	8
-kNumVRegsInChannelShift	equ	3		; (1 << 3) == 8
 
 ; ---------------------------------------------------------------------------
 ; Memory Image
 ; ===========================================================================
+[map all player.map]
 top:
 
 ; ----- Test harness -----
@@ -56,10 +55,15 @@ org 0100h
 			call	reset
 			mov	byte [playing],0x01
 .mainLoop:		call	tick
-			;mov	ah,00h
-			;int	16h
+			mov	ah,0x01		; check for key
+			int	0x16
+			jnz	.bail
+			call	waitVRet	; kill some time
 			jmp	.mainLoop
+.bail:			mov	ah,0x00		; eat the key
+			int	0x16
 			ret
+
 incSong:
 	incbin		"testsong"
 
@@ -69,36 +73,28 @@ numChannels		db	0x09
 
 ; ----- Variables updated during playback ----
 ; Global
-playing			db	0x00		; Play/Stop
-aOrder			dw	0x0000
-pos			db	0x00
-ticks			db	0xFF
-speed			db	0x06
+playing:		db	0x00		; Play/Stop
+aOrder:			dw	0x0000
+pos:			db	0x00
+ticks:			db	0xFE
+speed:			db	0x06
 
-; Virtual registers
-;	note   (semitones) ------                   carrier volume (base) ---.
-;	coarse (semitones +/-)---|----.             carrier volume (col +/-)-|----.
-;	fine   (F-NUMBER  +/-)---|----|-------.     modul.  volume (base)----|----|----.
-;	                         |    |       |     modul.  volume (col +/-)-|----|----|----.
-;	                         |    |       |                              |    |    |    |
-;				---- ---- ---------                         ---- ---- ---- ----
-virtualRegisters:
-	times kMaxChannels db	0x00,0x00,0x00,0x00,                        0x00,0x00,0x00,0x00	;ch0
-			;db	0x00 0x00 0x00 0x00                         0x00 0x00 0x00 0x00	;ch1
-			;db	0x00 0x00 0x00 0x00                         0x00 0x00 0x00 0x00	;ch2
-			;db	0x00 0x00 0x00 0x00                         0x00 0x00 0x00 0x00	;ch3
-			;db	0x00 0x00 0x00 0x00                         0x00 0x00 0x00 0x00	;ch4
-			;db	0x00 0x00 0x00 0x00                         0x00 0x00 0x00 0x00	;ch5
-			;db	0x00 0x00 0x00 0x00                         0x00 0x00 0x00 0x00	;ch6
-			;db	0x00 0x00 0x00 0x00                         0x00 0x00 0x00 0x00	;ch7
-			;db	0x00 0x00 0x00 0x00                         0x00 0x00 0x00 0x00	;ch8
+vrNoteOn:		dw	0x0000
+vrNote:			times kMaxChannels db 0x00
+vrCoarse:		times kMaxChannels db 0x00
+vrFine:			times kMaxChannels dw 0x0000
+vrCarrierVolKSL:	times kMaxChannels db 0x00
+vrCarrierVolAdj:	times kMaxChannels db 0x00
+vrModulatorVolKSL:	times kMaxChannels db 0x00
+vrModulatorVolAdj:	times kMaxChannels db 0x00
+
 
 ; ----- Adlib card tables -----
-; Locations of real registers
-registerBases:		db	0x20,0x40,0x60,0x80,0xE0	; Carrier
-			db	0x23,0x43,0x63,0x83,0xE3	; Modul
-			db	0xC0
+nonVirtRegInstOffsets:	db	0x00,0x02,0x03,0x04,0x05,0x07,0x08,0x09
+nonVirtRegBases:	db	0x23,0x63,0x83,0xE3,0x20,0x60,0x80,0xE0
+kNumNonVirt		equ	8
 
+; Offsets of the per-op registers.  Add 0x0 for modulator, 0x3 for carrier.
 operatorOffsets:	db	0x00,0x01,0x02,0x08,0x09,0x0A,0x10,0x11,0x12
 
 semitoneToFNumTable:	dw	0x0158,0x016d,0x0183,0x019a
@@ -119,7 +115,7 @@ reset:
 			mov	[aOrder],ax			; First order
 			xor	ax,ax
 			mov	[pos],ah			; First line
-			mov	byte [ticks],0xFF
+			mov	byte [ticks],0xFE
 			; Stop playback
 			mov	[playing],ah
 			ret
@@ -128,36 +124,55 @@ reset:
 
 tick:
 			; Playing?
-			mov	ah,[playing]
-			and	ah,ah
+			mov	al,[playing]
+			and	al,al
 			jz	.done			; ...no? Bye.
 			; Time for next line?
-			mov	ah,[ticks]
-			cmp	ah,[speed]
+			mov	al,[ticks]
+			inc	al
+			cmp	al,byte [speed]
 			jb	.notyet
 			call	getLine
-			mov	byte [ticks],0xFF	; tick=(-1)
-.notyet:		; Apply fx to all channels
-			inc	byte [ticks]		; tick++
-			xor	ecx,ecx
+			xor	al,al
+.notyet:		mov	byte [ticks],al
+			; Apply fx to all channels
+			xor	cx,cx
 			mov	cl,[numChannels]
 .updateChannel:		dec	cl
+			call	lookUpLine
 			call	applyEffect
 			call	applySpFx
-			call	latchRegs
+			call	applyVRegs	;TODO temporarily moved
 			and	cl,cl
 			jnz	.updateChannel
 .done:			ret
 
 ; ----- Traversing the song -----
 getLine:
-			xor	ecx,ecx
+			xor	cx,cx
 			mov	cl,[numChannels]
 .updateChannel:
 			dec	cx
-			; Use (order, channel, pos) to find the appropriate line
+			call	lookUpLine
+			; latch this line into virtual registers...
+			; ... except for effect, which must be applied
+			; per-tick.
+			call	applyNote
+			call	applyVol
+			call	applyInstr
+			and	cx,cx
+			jnz	.updateChannel
+			; advance to next line
+			inc	byte [pos]
+			call	fixUpSongVars
+			ret
+
+; Use (order, channel, pos) to find the appropriate line.
+; INPUT: channel in cl.
+; OUTPUT: line start address in bx
+lookUpLine:
 			mov	bx,[aOrder]
-			mov	si,cx
+			movzx	si,cl
 			movzx	dx,byte [bx+si]	; dx = pattern number
 			shl	dx,(kNumLinesInPatternShift + kNumBytesInLineShift)
 			mov	bx,[aSong]
@@ -166,15 +181,11 @@ getLine:
 			movzx	dx,byte [pos]
 			shl	dx,kNumBytesInLineShift
 			add	bx,dx		; bx = line start address
-			; make channel play line
-			call	applyNote
-			call	applyVol
-			call	applyInstr
-			and	cx,cx
-			jnz	.updateChannel
-.goToNextLine:
-			; advance to next line
-			inc	byte [pos]
+			ret
+
+; Check [pos].  If it's off the end of a pattern, update [aOrder] accordingly.
+; INPUT, OUTPUT: void
+fixUpSongVars:
 			cmp	byte [pos],kNumLinesInPattern ; At end of ptns?
 			jb	.ok
 			; advance to line 0 of next order
@@ -199,15 +210,22 @@ applyNote:		; Get note from line
 			mov	dl,[bx]
 			; Check for new note
 			btr	dx,7
-			jnc	.notNew
-			; Set virtual registers
-			lea	di,[virtualRegisters + ecx*8]
-			mov	[di],dl			; Set note vreg
-			inc	di
-			mov	byte [di],0		; Set coarse vreg
-			lea	di,[virtualRegisters + ecx*8 + koCarrierExtraVol]
-			mov	byte [di],0		; Set carrier vol+- vreg
-.notNew:		ret
+			jnc	.bail
+			; Set virtual registers...
+			; ... set the note frequency
+			movzx	si,cl
+			mov	[vrNote+si],dl
+			; ... zero out the registers that should be reset
+			; when encountering a new note
+			mov	byte [vrCoarse+si],0x00
+			shl	si,1
+			mov	word [vrFine+si],0x0000
+			; ... turn the note off, if a NoteOff was specified
+			cmp	dl,0x7F
+			jne	.bail
+			btr	word [vrNoteOn],cx
+
+.bail:			ret
 
 applyVol:		; Get vol from line
 			mov	dl,[bx+1]
@@ -215,9 +233,9 @@ applyVol:		; Get vol from line
 			bt	dx,7
 			jnc 	.notNew
 			; Set virtual register
-			and	dl,0x3F			; dl = vol column value
-			lea	di,[virtualRegisters + ecx*8 + koCarrierExtraVol]
-			mov	[di],dl			; Set carrier vol+- vreg
+			and	dl,0x3F			; Mask out deltas
+			movzx	si,cl
+			mov	byte [vrCarrierVolAdj+si],dl
 .notNew:		ret
 
 applyInstr:		; Get new-bits from line
@@ -225,86 +243,118 @@ applyInstr:		; Get new-bits from line
 			; Check for new instrument
 			bt	dx,6
 			jnc	.notNew
-			; Set virtual registers
+			; Find the instrument's contents
 			movzx	dx,byte [bx+2]		; Get instr# from line
 			shr	dx,4			; dx = instr number
 			shl	dx,kNumBytesInInstrShift; dx = instr offset
-			movzx	esi,word [aSong]
+			mov	si,word [aSong]
 			add	si,[si+koStartOfInstruments]
 			add	si,dx			; si = instr start addr
-			mov	dl,[si+koCarrier+koKSLVol] ; dl = carrier volume and KSL
-			lea	di,[virtualRegisters + ecx*8]
-			mov	[di+koCarrierBaseVol],dl ; Set carrier vol vreg
-			mov	dl,[si+koModulator+koKSLVol] ; dl = modul volume and KSL
-			mov	[di+koModulatorBaseVol],dl ; Set modul vol vreg
-			mov	byte [di+koModulatorExtraVol],0	; Set modul vol+- vreg
-			mov	byte [di+koFine],0	; Set fine tune vreg
-			; Set real registers
-			mov	bp,cx
-			xor	edi,edi
-.setReg:		mov	al,[esi+edi]
-			mov	ah,[registerBases+di]
-			cmp	si,10
-			jge	.perInstr
-.perOp:			add	ah,[operatorOffsets+bp]
-			sub	ah,cl
-.perInstr:		add	ah,cl
+			movzx	bp,cl			; bp = channel #
+			; Update virtual registers from instrument
+			mov	dl,[si+koCarrier+koKSLVol]
+			mov	[vrCarrierVolKSL+bp],dl	; carrier volume
+			mov	dl,[si+koModulator+koKSLVol]
+			mov	[vrModulatorVolKSL+bp],dl; modulator volume
+			; ... zero out the virtual registers that should be
+			; reset when encountering a new instrument
+			mov	byte [bp+vrCarrierVolAdj],0x00
+			mov	byte [bp+vrModulatorVolAdj],0x00
+			; Update real registers that are not virtualized by
+			; any virtual register.  These give each instrument
+			; its unique timbre.
+
+			; per-instrument registers (special case)
+			mov	ah,0xC0
+			add	ah,cl
+			mov	al,[si+koFeedback]
+			call	setAdlibRegister	; pesky feedback reg.
+			mov	ah,0xB0
+			add	ah,cl
+			mov	al,0x00
+			call	setAdlibRegister	; NoteOff reg. to 00
+			bts	word [vrNoteOn],cx	; but set flag to 1.
+			; This will flag the next virtual frequency commit
+			; to turn the note back on (from 00).
+
+			; per-op registers (general case)
+			push	bx
+			push	cx
+			mov	cl,[bp+operatorOffsets]
+			mov	bp,nonVirtRegInstOffsets
+			mov	di,nonVirtRegBases
+			mov	ch,kNumNonVirt
+			; repeated...
+.nextReg:		mov	ah,[di]			; ah = register base
+			add	ah,cl			; ah = register address
+			movzx	bx,byte [ds:bp]
+			mov	al,[si+bx]		; al = byte from instr
 			call	setAdlibRegister
-			inc	di
-			cmp	di,11
-			jl	.setReg
-			; Set note-on
-			; TODO.  How?
+			inc	di			; next register base
+			inc	bp			; next byte from instr
+			dec	ch
+			jnz	.nextReg
+			pop	cx
+			pop	bx
 .notNew:		ret
 
 applyEffect:		ret
 applySpFx:		ret
 
-latchRegs:		mov	bp,cx
-			mov	di,[virtualRegisters+ecx*8]
-			mov	si,[di+koNote]	; si = semitone
-			add	si,[di+koCoarse]; apply coarse tuning
+; Semantics:  Apply VRegs of channel CL.
+applyVRegs:
+			; calculate semitone
+			mov	di,cx			; di = channel
+			movzx	si,byte [di+vrNote]	; si = semitone
+			xor	ax,ax
+			mov	al,[di+vrCoarse]
+			add	si,ax			; apply coarse tuning
 			; convert from semitone to f-number and octave
-			xor	cl,cl
+			xor	ch,ch
 .normalize:		cmp	si,12
-			jl	.done
+			jb	.done
 			sub	si,12
-			inc	cl
+			inc	ch			; Octave
 			jmp	.normalize
-.done:			mov	dx,[si+semitoneToFNumTable]
-			add	dx,[di+koFine]  ; apply fine tuning
-			; dx = F-NUMBER
-			; cl = Octave
-
+.done:			and	ch,0x7			; max octave
+			shl	si,1
+			mov	dx,[si+semitoneToFNumTable] ; F-Num
+			add	dx,[di+vrFine]		; apply fine tuning
 			; F-NUMBER (low)
 			mov	ah,0xA0
-			add	ah,[operatorOffsets+bp]
-			mov	al,dl		; F-Num (lo)
+			add	ah,cl			; HW Register
+			mov	al,dl			; F-Num (lo)
 			call	setAdlibRegister
-			; F-NUMBER (high) & Octave & Note-On 
-			add	ah,0x10
-			mov	al,dh		; F-Num (hi)
-			shl	cl,2
-			or	al,cl		; Octave
-			or	al,0x20		; Note-On (TODO doesn't belong here!)
+			; F-NUMBER (high) & Octave & NoteOn
+			mov	ah,0xB0
+			add	ah,cl			; HW Register
+			mov	al,dh			; F-Num (hi)
+			shl	ch,2
+			or	al,ch			; Octave
+			mov	cx,di
+			bt	[vrNoteOn],cx
+			jnc	.noNoteOn		; NoteOff
+			or	al,0x20			; NoteOn
+.noNoteOn:		call	setAdlibRegister
+			; CARRIER VOLUME & KSL
+			mov	ah,0x43
+			add	ah,[di+operatorOffsets]; HW Register
+			mov	al,[di+vrCarrierVolKSL]; Volume, KSL
+			add	al,[di+vrCarrierVolAdj]; Volumn column
 			call	setAdlibRegister
-			; Carrier volume & KSL
-			sub	ah,0x70
-			mov	al,[di+koCarrierBaseVol]
-			add	al,[di+koCarrierExtraVol]
+			; MODULATOR VOLUME & KSL
+			mov	ah,0x40
+			add	ah,[di+operatorOffsets]   ;HW Register
+			mov	al,[di+vrModulatorVolKSL] ;Volume,KSL
+			add	al,[di+vrModulatorVolAdj] ;Mod. volume cmd
 			call	setAdlibRegister
-			; Modulator volume & KSL
-			add	ah,0x3
-			mov	al,[di+koModulatorBaseVol]
-			add	al,[di+koModulatorExtraVol]
-			call	setAdlibRegister
-			mov	cx,bp
 			ret
 
 ;----- Hardware writes -----
 ; Sets adlib register ah to the value al.
 setAdlibRegister:
 			pusha
+			call	printAx	; DEBUG
 			mov	dx,0x388
 			xchg	al,ah
 			out	dx,al	; address
@@ -320,3 +370,32 @@ setAdlibRegister:
 .killTime:		in	al,dx
 			loop	.killTime
 			ret
+
+; For mainloop timing
+waitVRet:
+			mov	dx,0x03DA
+.inVRet:		in	al,dx
+			test	al,8
+			jnz	.inVRet
+.noVRet:		in	al,dx
+			test	al,8
+			jz	.noVRet
+			ret
+
+; For debugging
+printAx:		push	cx
+			mov	cx,4
+.printDigit:		rol	ax,4
+			push	ax
+			movzx	eax,al
+			and	al,0xf
+			mov	al,[eax+.higits]
+			mov	ah,0Eh
+			int	10h
+			pop	ax
+			loop	.printDigit
+			pop	cx
+			ret
+.higits:		db	'0','1','2','3','4','5','6','7'
+			db	'8','9','a','b','c','d','e','f'
+
