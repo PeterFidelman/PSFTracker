@@ -76,7 +76,7 @@ numChannels		db	0x09
 playing:		db	0x00		; Play/Stop
 aOrder:			dw	0x0000
 pos:			db	0x00
-ticks:			db	0xFE
+ticks:			db	0x00
 speed:			db	0x06
 
 vrNoteOn:		dw	0x0000
@@ -90,6 +90,8 @@ vrModulatorVolAdj:	times kMaxChannels db 0x00
 
 
 ; ----- Adlib card tables -----
+; The real registers that are not virtualized by any virtual register.
+; These give each instrument its unique timbre.
 nonVirtRegInstOffsets:	db	0x00,0x02,0x03,0x04,0x05,0x07,0x08,0x09
 nonVirtRegBases:	db	0x23,0x63,0x83,0xE3,0x20,0x60,0x80,0xE0
 kNumNonVirt		equ	8
@@ -115,37 +117,69 @@ reset:
 			mov	[aOrder],ax			; First order
 			xor	ax,ax
 			mov	[pos],ah			; First line
-			mov	byte [ticks],0xFE
+			mov	byte [ticks],0x00
 			; Stop playback
 			mov	[playing],ah
 			ret
 .fail:			stc
 			ret
 
+;tick:
+;			; Playing?
+;			mov	al,[playing]
+;			and	al,al
+;			jz	.done			; ...no? Bye.
+;			; Time for next line?
+;			mov	al,[ticks]
+;			inc	al
+;			cmp	al,byte [speed]
+;			jb	.notyet
+;			call	getLine
+;			xor	al,al
+;.notyet:		mov	byte [ticks],al
+;			; Apply fx to all channels
+;			xor	cx,cx
+;			mov	cl,[numChannels]
+;.updateChannel:		dec	cl
+;			call	lookUpLine
+;			call	applyEffect
+;			call	applySpFx
+;			call	applyVRegs
+;			and	cl,cl
+;			jnz	.updateChannel
+;.done:			ret
 tick:
 			; Playing?
 			mov	al,[playing]
 			and	al,al
-			jz	.done			; ...no? Bye.
-			; Time for next line?
+			jz	.done
+			; If ticks=0, grab a line.
 			mov	al,[ticks]
-			inc	al
-			cmp	al,byte [speed]
-			jb	.notyet
+			and	al,al
+			jnz	.skip
 			call	getLine
-			xor	al,al
-.notyet:		mov	byte [ticks],al
 			; Apply fx to all channels
-			xor	cx,cx
+.skip:			xor	ch,ch
 			mov	cl,[numChannels]
 .updateChannel:		dec	cl
 			call	lookUpLine
 			call	applyEffect
 			call	applySpFx
-			call	applyVRegs	;TODO temporarily moved
+			call	applyVRegs
 			and	cl,cl
 			jnz	.updateChannel
-.done:			ret
+			; Tick.
+			inc	byte [ticks]
+			mov	al,[ticks]
+			; Time for new line?
+			cmp	al,byte [speed]
+			jb	.done		; nope
+			; If ticks>=speed, set ticks=0 for next time
+			; and prepare to grab the next line.
+			mov	byte [ticks],0x00
+			inc	byte [pos]
+			call	fixUpSongVars
+.done			ret
 
 ; ----- Traversing the song -----
 getLine:
@@ -162,9 +196,6 @@ getLine:
 			call	applyInstr
 			and	cx,cx
 			jnz	.updateChannel
-			; advance to next line
-			inc	byte [pos]
-			call	fixUpSongVars
 			ret
 
 ; Use (order, channel, pos) to find the appropriate line.
@@ -298,7 +329,75 @@ applyInstr:		; Get new-bits from line
 			pop	bx
 .notNew:		ret
 
-applyEffect:		ret
+applyEffect:		;ret
+			mov	ax,[bx+2]		; ah=param
+			and	al,0x0F			; al=cmd
+			movzx	si,al
+			movzx	di,cl
+			shl	si,1
+			jmp	[.jumpTab+si]
+.jumpTab		dw	.cmd0	; 0 - ARP
+			dw	.cmd1	; 1 - SLIDE UP
+			dw	.cmd2	; 2 - SLIDE DOWN
+			dw	.cmd3	; 3 - SLIDE TO NOTE
+			dw	.cmd4	; 4 - VIBRATO
+			dw	.bail	; 5 - ---
+			dw	.bail	; 6 - ---
+			dw	.bail	; 7 - ---
+			dw	.bail	; 8 - ---
+			dw	.bail	; 9 - ---
+			dw	.bail	; A - ---
+			dw	.cmdB	; B - POSITION JUMP
+			dw	.cmdC	; C - FINE NOTE CUT
+			dw	.cmdD	; D - PATTERN BREAK
+			dw	.bail	; E - ---
+			dw	.cmdF	; F - SPEED
+.cmd0:			; 0 - ARP
+			;and	ah,ah
+			;jz	.bail		; 000 is nop
+			push	cx
+			mov	dl,ah
+			movzx	ax,byte [ticks]
+			mov	cl,3
+			div	cl		; ah = remainder = arp pos
+			mov	cl,2
+			sub	cl,ah
+			shl	cl,2
+			shr	dl,cl		; dl = param >> 4*(2-arpPos)
+			and	dl,0x0F		; last nybble only, please
+			mov	[di+vrCoarse],dl
+			pop	cx
+			ret
+.cmd1:			; 1 - SLIDE UP
+			movzx	ax,ah
+			shl	di,1
+			add	[di+vrFine],ax
+			ret
+.cmd2:			; 2 - SLIDE DOWN
+			movzx	ax,ah
+			shl	di,1
+			sub	[di+vrFine],ax
+			ret
+.cmd3:			; 3 - SLIDE TO NOTE
+			ret
+.cmd4:			; 4 - VIBRATO
+			ret
+.cmdB:			; B - POSITION JUMP
+			ret
+.cmdC:			; C - FINE NOTE CUT
+			movzx	ax,ah
+			cmp	al,[ticks]
+			jne	.bail
+			btc	word [vrNoteOn],cx	; turn off note
+			ret
+.cmdD:			; D - PATTERN BREAK
+			ret
+.cmdF:			; F - SPEED
+			movzx	ax,ah
+			mov	[speed],al
+.bail:			ret
+
+
 applySpFx:		ret
 
 ; Semantics:  Apply VRegs of channel CL.
@@ -354,7 +453,6 @@ applyVRegs:
 ; Sets adlib register ah to the value al.
 setAdlibRegister:
 			pusha
-			call	printAx	; DEBUG
 			mov	dx,0x388
 			xchg	al,ah
 			out	dx,al	; address
@@ -383,19 +481,19 @@ waitVRet:
 			ret
 
 ; For debugging
-printAx:		push	cx
-			mov	cx,4
-.printDigit:		rol	ax,4
-			push	ax
-			movzx	eax,al
-			and	al,0xf
-			mov	al,[eax+.higits]
-			mov	ah,0Eh
-			int	10h
-			pop	ax
-			loop	.printDigit
-			pop	cx
-			ret
-.higits:		db	'0','1','2','3','4','5','6','7'
-			db	'8','9','a','b','c','d','e','f'
-
+;printAx:		push	cx
+;			mov	cx,4
+;.printDigit:		rol	ax,4
+;			push	ax
+;			movzx	eax,al
+;			and	al,0xf
+;			mov	al,[eax+.higits]
+;			mov	ah,0Eh
+;			int	10h
+;			pop	ax
+;			loop	.printDigit
+;			pop	cx
+;			ret
+;.higits:		db	'0','1','2','3','4','5','6','7'
+;			db	'8','9','a','b','c','d','e','f'
+;
