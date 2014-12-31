@@ -62,6 +62,8 @@ org 0100h
 			jmp	.mainLoop
 .bail:			mov	ah,0x00		; eat the key
 			int	0x16
+			call	reset		; turn off any stuck notes
+			call	tick
 			ret
 
 incSong:
@@ -128,7 +130,7 @@ tick:
 			; Playing?
 			mov	al,[playing]
 			and	al,al
-			jz	.done
+			jz	.killNotes
 			; If ticks=0, grab a line.
 			mov	al,[ticks]
 			and	al,al
@@ -155,7 +157,12 @@ tick:
 			mov	byte [ticks],0x00
 			inc	byte [pos]
 			call	fixUpSongVars
-.done			ret
+.done:			ret
+.killNotes:		; Turn off any stuck notes.
+			; Won't work if ADSR is set for infinite length.
+			xor	ax,ax
+			mov	[vrNoteOn],ax
+			jmp	.skip
 
 ; ----- Traversing the song -----
 getLine:
