@@ -124,30 +124,6 @@ reset:
 .fail:			stc
 			ret
 
-;tick:
-;			; Playing?
-;			mov	al,[playing]
-;			and	al,al
-;			jz	.done			; ...no? Bye.
-;			; Time for next line?
-;			mov	al,[ticks]
-;			inc	al
-;			cmp	al,byte [speed]
-;			jb	.notyet
-;			call	getLine
-;			xor	al,al
-;.notyet:		mov	byte [ticks],al
-;			; Apply fx to all channels
-;			xor	cx,cx
-;			mov	cl,[numChannels]
-;.updateChannel:		dec	cl
-;			call	lookUpLine
-;			call	applyEffect
-;			call	applySpFx
-;			call	applyVRegs
-;			and	cl,cl
-;			jnz	.updateChannel
-;.done:			ret
 tick:
 			; Playing?
 			mov	al,[playing]
@@ -191,9 +167,9 @@ getLine:
 			; latch this line into virtual registers...
 			; ... except for effect, which must be applied
 			; per-tick.
+			call	applyInstr
 			call	applyNote
 			call	applyVol
-			call	applyInstr
 			and	cx,cx
 			jnz	.updateChannel
 			ret
