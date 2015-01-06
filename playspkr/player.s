@@ -26,7 +26,10 @@ org 0100h
 			mov	byte [playing],0x01
 .mainLoop:		call	tick
 			call	waitVRet
-			jmp	.mainLoop
+			mov	ah,0x01
+			int	0x16
+			jz	.mainLoop
+			call	spkr_Off
 			ret
 incSong:
 	incbin		"testsong"
@@ -254,9 +257,16 @@ spkr_On:
 			; When port 0x61 bit 0 and 1 are set, the PC
 			; speaker will follow PIT2.
 			in	al,0x61
-			or	al,0x03
+
+			; speaker already on?
+			mov	ah,al
+			or	ah,0x03
+			cmp	ah,al
+			je	.bail
+
+			mov	al,ah
 			out	0x61,al
-			ret
+.bail			ret
 
 ; Turn off the PC speaker
 spkr_Off:
