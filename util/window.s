@@ -3,64 +3,108 @@ top:
 			push	0xB800
 			pop	es
 
-			; first "channel"
-			mov	si,pattern
-			add	si,0
-			mov	di,160*1
-			call	pl_patternLine
+			; Raw hex test.  See if it respects a width of 5.
+			;mov	si,pattern	; where to print FROM
+			;mov	di,5		; where to print TO (x)
+			;mov	al,5		; where to print TO (y)
+			;mov	bx,drawHexLine	; function to use for printing each line
+			;mov	ch,5		; number of bytes of input consumed per output line
+			;mov	dl,7		; number of lines to print
+			;mov	cl,0		; starting line
+			;mov	dh,1		; if nonzero, number the lines
+			;mov	bp,16
+			;call	drawWindow
 
-			mov	si,pattern
-			add	si,4
-			mov	di,160*2
-			call	pl_patternLine
-
-			mov	si,pattern
-			add	si,8
-			mov	di,160*3
-			call	pl_patternLine
-
-			mov	si,pattern
-			add	si,0x0C
-			mov	di,160*4
-			call	pl_patternLine
-
-			; second "channel"
-			mov	si,pattern
-			add	si,0
-			mov	di,160*1
-			add	di,18
-			call	pl_patternLine
-
-			mov	si,pattern
-			add	si,4
-			mov	di,160*2
-			add	di,18
-			call	pl_patternLine
-
-			mov	si,pattern
-			add	si,8
-			mov	di,160*3
-			add	di,18
-			call	pl_patternLine
-
-			mov	si,pattern
-			add	si,0x0C
-			mov	di,160*4
-			add	di,18
-			call	pl_patternLine
+			; Pattern line.
+			mov	si,pattern	; where to print FROM
+			mov	di,5		; where to print TO (x)
+			mov	al,5		; where to print TO (y)
+			mov	bx,drawPatternLine; function to use for printing each line
+			mov	ch,4		; number of bytes of input consumed per output line
+			mov	dl,7		; number of lines to print
+			mov	cl,0		; starting line
+			mov	dh,1		; if nonzero, number the lines
+			mov	bp,16
+			call	drawWindow
 
 			ret
 
+; ---- Draw a window ----
 
-; ---- Print a line in various formats ----
+; Semantics:
+; ds:SI = where to print FROM
+;    BP = length of the above
+;    DI = where to print TO (x)
+;    AL = where to print TO (y)
+;
+;    BX = function to use for printing each line
+;    CH = number of bytes of input consumed per line of output
+;    
+;    CL = starting line
+;    DL = number of lines to print
+;    DH = if nonzero, number the lines
+
+drawWindow:
+			pusha
+			; Where to print to?
+			mul	byte [.k160]	; ax = 160y
+			shl	di,1
+			add	di,ax		; [es:di] = char at (x,y)
+
+			; Where to print from?
+			mov	al,cl
+			mul	ch		; ax = cl*ch
+			add	si,ax
+			add	bp,si		; bp = last valid byte
+
+			; Ok, print the lines
+			mov	al,cl		; initial line number
+.loop:			; Print line number?
+			and	dh,dh
+			jz	.printLine	; ...no
+						; ...yes
+			test	al,0x03		; lines 0,4,8,C,... are major
+			jz	.majorLine	; is this one major?
+.minorLine:		mov	ah,0x07		; minor = white
+			jmp	.printLineNumber
+.majorLine:		mov	ah,0x0C		; major = red
+.printLineNumber:	call	drawHexByteInColor; print line number...
+			add	di,4
+			mov	byte [es:di],0x20; ...and a trailing space
+			mov	byte [es:di+1],ah; ...in the same color
+			add	di,2
+.printLine:		; Bounds-check
+			cmp	si,bp		; If line starts out-of-bounds
+			ja	.advanceWritePtr; then don't print.
+			; Print line
+			call	bx		; OK, use the function pointer
+			; Move on to the next line
+.advanceWritePtr:	add	di,160		; bump write-ptr to next line
+			and	dh,dh		; did we print line number?
+			jz	.advanceReadPtr	; ...no
+			sub	di,(4+2)	; ...yes, so don't bump as far
+.advanceReadPtr:	push	cx		; jigger with registers
+			movzx	cx,ch		; ...so that we can...
+			add	si,cx		; ...bump read-ptr to next line
+			pop	cx		; unjigger registers
+			inc	al		; increment line number
+			dec	dl
+			jnz	.loop
+.bail			popa
+			ret
+.k160			db	160
+
+; ---- Draw one line in various formats ----
 
 ; Semantics:
 ; ds:SI = where to print from
 ; es:DI = where to print to
+;    CH = number of hex bytes to print in a line
 
 ; Raw hex
-pl_rawHex:
-			mov	cx,.numBytesInLine
+drawHexLine:
+			pusha
+			movzx	cx,ch
 .another:		
 			mov	al,[si]
 			; High nybble
@@ -74,18 +118,22 @@ pl_rawHex:
 			and	bp,0x0F
 			mov	ah,[ds:bp+higits]
 			mov	[es:di],ah
-			add	di,2+2			; Leave a blank space
+			add	di,2
+			; Leave a blank space
+			mov	byte [es:di],0x20
+			add	di,2
 			; Next byte
 			inc	si
 			dec	cx
 			jnz	.another
-.bail:			ret
-.numBytesInLine	equ	16
+.bail:			popa
+			ret
+.numInputBytesInLine	equ	4
 
 ; Pattern line
-pl_patternLine:
-.note:
-			movzx	ax,[si]
+drawPatternLine:
+			pusha
+.note:			movzx	ax,[si]
 			btr	ax,7
 			jnc	.noNote
 			cmp	al,0x7F
@@ -94,7 +142,7 @@ pl_patternLine:
 			; Print note
 			movzx	bp,ah
 			shl	bp,1
-			mov	cx,[bp+notes]		; lookup note & color
+			mov	cx,[bp+.noteToText]	; lookup note & color
 			mov	[es:di],cx		; print note
 			; Print octave
 			add	di,2
@@ -177,7 +225,7 @@ pl_patternLine:
 			add	di,2
 			mov	[es:di],cx
 			add	di,2
-			jmp	.bail
+			jmp	.done
 .not000:
 			; Nontrivial effect
 			movzx	bp,al
@@ -199,14 +247,10 @@ pl_patternLine:
 			mov	cl,[ds:bp+higits]
 			mov	[es:di],cx
 			add	di,2
-.bail:			ret
+.done:			popa
+			ret
 .notesInOctave:		db	0xC
-
-
-higits:			db	'0','1','2','3','4','5','6','7'
-			db	'8','9','A','B','C','D','E','F'
-
-notes:			db	'c',0x0F,
+.noteToText:		db	'c',0x0F,
 			db	'c',0x0C,
 			db	'd',0x0F,
 			db	'd',0x0C,
@@ -218,6 +262,33 @@ notes:			db	'c',0x0F,
 			db	'a',0x0F,
 			db	'a',0x0C,
 			db	'b',0x0F
+
+; ----- Drawing primitives -----
+; Byte in AL
+; Color in AH
+; Destination [ES:DI]
+drawHexByteInColor:
+			pusha
+			; High nybble
+			movzx	bp,al
+			push	bp
+			shr	bp,4
+			mov	al,[ds:bp+higits]
+			mov	[es:di],ax
+			add	di,2
+			; Low nybble
+			pop	bp
+			and	bp,0x0F
+			mov	al,[ds:bp+higits]
+			mov	[es:di],ax
+			popa
+			ret
+
+; ----- Important tables -----
+higits:			db	'0','1','2','3','4','5','6','7'
+			db	'8','9','A','B','C','D','E','F'
+
+
 
 ; ----- Dummy data to test printing -----
 windowStuff:		db	0xDE, 0xAD, 0xBE, 0xEF
