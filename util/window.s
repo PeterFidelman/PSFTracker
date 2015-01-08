@@ -99,9 +99,9 @@ drawWindow:
 ; Semantics:
 ; ds:SI = where to print from
 ; es:DI = where to print to
-;    CH = number of hex bytes to print in a line
 
-; Raw hex
+; Plain hex.
+; Special argument:  CH = number of hex bytes to print in a line
 drawHexLine:
 			pusha
 			movzx	cx,ch
@@ -130,7 +130,7 @@ drawHexLine:
 			ret
 .numInputBytesInLine	equ	4
 
-; Pattern line
+; Formatted pattern-line.
 drawPatternLine:
 			pusha
 .note:			movzx	ax,[si]
@@ -264,9 +264,11 @@ drawPatternLine:
 			db	'b',0x0F
 
 ; ----- Drawing primitives -----
-; Byte in AL
-; Color in AH
-; Destination [ES:DI]
+
+; Does what it says on the tin.
+; es:DI = Where to write it
+;    AL = Byte
+;    AH = Color/Attribute
 drawHexByteInColor:
 			pusha
 			; High nybble
@@ -287,8 +289,6 @@ drawHexByteInColor:
 ; ----- Important tables -----
 higits:			db	'0','1','2','3','4','5','6','7'
 			db	'8','9','A','B','C','D','E','F'
-
-
 
 ; ----- Dummy data to test printing -----
 windowStuff:		db	0xDE, 0xAD, 0xBE, 0xEF
