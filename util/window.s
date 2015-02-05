@@ -65,9 +65,9 @@ drawWindow:
 						; ...yes
 			test	al,0x03		; lines 0,4,8,C,... are major
 			jz	.majorLine	; is this one major?
-.minorLine:		mov	ah,0x07		; minor = white
+.minorLine:		mov	ah,0x07		; minor = whi
 			jmp	.printLineNumber
-.majorLine:		mov	ah,0x0C		; major = red
+.majorLine:		mov	ah,0x0E		; major = YEL
 .printLineNumber:	call	drawHexByteInColor; print line number...
 			add	di,4
 			mov	byte [es:di],0x20; ...and a trailing space
@@ -148,19 +148,19 @@ drawPatternLine:
 			add	di,2
 			mov	cl,al
 			add	cl,0x30			; octave+'0'
-			mov	ch,0x07			; white
+			mov	ch,0x17			; 17=blu/whi
 			mov	[es:di],cx		; print octave
 			add	di,2
 			jmp	.instr
 .noteOff:
-			mov	cx,0x072D		; 07=white, 2D=' '
+			mov	cx,0x172D		; 17=blu/whi, 2D='-'
 			mov	[es:di],cx
 			add	di,2
 			mov	[es:di],cx
 			add	di,2
 			jmp	.instr
 .noNote:
-			mov	cx,0x0720		; 07=white, 20=' '
+			mov	cx,0x17F9		; 17=blu/whi, F9=cdot
 			mov	[es:di],cx
 			add	di,2
 			mov	[es:di],cx
@@ -168,7 +168,7 @@ drawPatternLine:
 .instr:
 			mov	al,[si+1]
 			bt	ax,6	
-			mov	ch,0x1b			; 1b=blue/CYAN
+			mov	ch,0x0b			; 0b=blk/CYN
 			jnc	.noInstr
 			; Instrument nybble
 			mov	al,[si+2]
@@ -179,11 +179,11 @@ drawPatternLine:
 			add	di,2
 			jmp	.volume
 .noInstr:
-			mov	cl,0x20			; 20=' '
+			mov	cl,0xF9			; F9=cdot
 			mov	[es:di],cx
 			add	di,2
 .volume:
-			mov	ch,0x02			; 02=black/green
+			mov	ch,0x02			; 02=blk/green
 			mov	al,[si+1]
 			bt	ax,7
 			jnc	.noVolume
@@ -202,7 +202,7 @@ drawPatternLine:
 			add	di,2
 			jmp	.effect
 .noVolume:
-			mov	cl,0x20			; 20=' '
+			mov	cl,0xF9			; F9=cdot
 			mov	[es:di],cx
 			add	di,2
 			mov	[es:di],cx
@@ -211,15 +211,16 @@ drawPatternLine:
 .effect:
 			mov	al,[si+2]
 			and	al,0x0F
-			mov	ch,0x1d			; 1D=blue/MAGENTA
+			mov	ch,0x0d			; 0D=blk/MAG
 			; Check for 000 effect
 			cmp	al,0x00
 			jne	.not000
 			cmp	byte [si+3],0x00
 			jne	.not000
 			; effect is 000, draw blank.
-			mov	cl,0x20			; 20=' '
+			mov	cl,0xF9			; F9=cdot
 			mov	[es:di],cx
+			mov	ch,0x0e			; 0E=blk/YEL
 			add	di,2
 			mov	[es:di],cx
 			add	di,2
@@ -234,7 +235,7 @@ drawPatternLine:
 			add	di,2
 			; Param...
 			mov	al,[si+3]
-			mov	ch,0x1e			; 1E=blue/YELLOW
+			mov	ch,0x0e			; 0E=blk/YEL
 			; ...high nybble
 			movzx	bp,al
 			shr	bp,4
@@ -250,18 +251,18 @@ drawPatternLine:
 .done:			popa
 			ret
 .notesInOctave:		db	0xC
-.noteToText:		db	'c',0x0F,
-			db	'c',0x0C,
-			db	'd',0x0F,
-			db	'd',0x0C,
-			db	'e',0x0F,
-			db	'f',0x0F,
-			db	'f',0x0C,
-			db	'g',0x0F,
-			db	'g',0x0C,
-			db	'a',0x0F,
-			db	'a',0x0C,
-			db	'b',0x0F
+.noteToText:		db	'C',0x1F,		;1F=blu/WHI
+			db	'c',0x1C,		;1C=blu/RED
+			db	'D',0x1F,
+			db	'd',0x1C,
+			db	'E',0x1F,
+			db	'F',0x1F,
+			db	'f',0x1C,
+			db	'G',0x1F,
+			db	'g',0x1C,
+			db	'A',0x1F,
+			db	'a',0x1C,
+			db	'B',0x1F
 
 ; ----- Drawing primitives -----
 
