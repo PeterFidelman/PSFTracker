@@ -333,7 +333,7 @@ applyEffect:		;ret
 			dw	.cmdB	; B - POSITION JUMP
 			dw	.cmdC	; C - FINE NOTE CUT
 			dw	.cmdD	; D - PATTERN BREAK
-			dw	.bail	; E - ---
+			dw	.cmdE	; E - MODULATOR VOLUME
 			dw	.cmdF	; F - SPEED
 .cmd0:			; 0 - ARP
 			;and	ah,ah
@@ -374,6 +374,9 @@ applyEffect:		;ret
 			btc	word [vrNoteOn],cx	; turn off note
 			ret
 .cmdD:			; D - PATTERN BREAK
+			ret
+.cmdE:			; E - MODULATOR VOLUME
+			mov	[di+vrModulatorVolAdj],ah
 			ret
 .cmdF:			; F - SPEED
 			movzx	ax,ah
@@ -420,9 +423,9 @@ applyVRegs:
 .noNoteOn:		call	setAdlibRegister
 			; CARRIER VOLUME & KSL
 			mov	ah,0x43
-			add	ah,[di+operatorOffsets]; HW Register
-			mov	al,[di+vrCarrierVolKSL]; Volume, KSL
-			add	al,[di+vrCarrierVolAdj]; Volumn column
+			add	ah,[di+operatorOffsets] ; HW Register
+			mov	al,[di+vrCarrierVolKSL] ; Volume, KSL
+			add	al,[di+vrCarrierVolAdj] ; Volume column
 			call	setAdlibRegister
 			; MODULATOR VOLUME & KSL
 			mov	ah,0x40
