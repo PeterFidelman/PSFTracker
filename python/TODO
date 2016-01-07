@@ -1,0 +1,10 @@
+DONE
+- break out crt.py
+- write regtest.py
+- write player1.py
+
+DOING:
+- tracker.py
+
+TODO:
+- refactor player1.py to offload more register fixup work to opl2.py
