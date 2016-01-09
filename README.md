@@ -70,9 +70,8 @@ These exercise features I wanted to add to the tracker or player.  Feel free to 
 ## API Reference
 PSFTracker is still under development and you shouldn't count on any part of the code  remaining stable.
 
-The song format, however, *is* stable.  See `songs/format.s` and `playspkr/format.s`. for more information.
+The song format, however, *is* stable.  See `songs/format.s` and `playspkr/format.s`, and this repository's Wiki section, for more information.
 
-TODO add more information about the song format.
 
 ## Contributors
 
