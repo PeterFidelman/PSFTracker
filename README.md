@@ -38,7 +38,7 @@ This isn't in any distro, as far as I know.  Fortunately, it has absolutely no d
 Simply "git clone" this repo somewhere and you're off and running.
 
 * The `.py` files require Python 2 (tested on 2.7.9).
-* Each `.s` file is [nasm](http://nasm.us) 80386 assembly, targeting a DOS machine with a Sound Blaster or Adlib compatible sound card.  . Each `.s` file produces a native DOS COM binary; assemble with  `nasm -f bin foo.s -o foo.com`.
+* Each `.s` file is [nasm](http://nasm.us) 80386 assembly, targeting a DOS machine with a Sound Blaster or Adlib compatible sound card. Each `.s` file produces a native DOS COM binary; assemble with  `nasm -f bin foo.s -o foo.com`.
 
 ## Project Organization
 ###player/
@@ -52,7 +52,7 @@ DOS PC-Speaker player.
 This is a little hacky player that takes specially formatted 1-channel songs and blasts them out the PC speaker.
 
 ###python/
-Python utilities for song cross-development.  Contains small implementations of the song player and viewer, including software OPL2 Adlib emulation via pyopl.
+Python utilities that let you play and write songs on a modern PC.  Contains small implementations of the song player and viewer, including software OPL2 Adlib emulation via pyopl.
 
 ###tracker/
 DOS Adlib tracker.  (Doesn't exist yet).
@@ -72,7 +72,7 @@ PSFTracker is still under development and you shouldn't count on any part of the
 
 The song format, however, *is* stable.  See `songs/format.s` and `playspkr/format.s`. for more information.
 
-TODO add more information about the song format
+TODO add more information about the song format.
 
 ## Contributors
 
