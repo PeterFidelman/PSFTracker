@@ -8,3 +8,4 @@ DOING:
 
 TODO:
 - refactor player1.py to offload more register fixup work to opl2.py
+- fix on Raspberry Pi:  Issue https://github.com/raspberrypi/linux/issues/994
