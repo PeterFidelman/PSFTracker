@@ -18,6 +18,7 @@ def inputLoop(opl, song, player):
 		patternView(song, player, x=0, y=1, height=16)
 		orderView(song, player, x=0, y=18, height=5)
 		instrView(song, x=32, y=18, height=5)
+		lincrt.refresh()
 
 	#model
 	player.tick()
@@ -80,6 +81,7 @@ def instrView(song, x, y, height):
 	# Fill leftover lines with dots
 	for instr in range(min(height, song.getNumInstr()), height):
 		lincrt.printAt(x, y+instr, "."*41)
+
 
 def patternView(song, player, x, y, height):
 	(order, playingLine, dont_care) = player.getPosition()

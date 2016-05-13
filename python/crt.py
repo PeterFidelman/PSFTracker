@@ -10,13 +10,11 @@ class CRT:
 
 	def moveTo(self, x, y):
 		self.stdscr.move(y, x)
-		self.stdscr.refresh()
 
 	def printAt(self, x, y, string):
 		(oldy, oldx) = self.stdscr.getyx()
 		self.stdscr.addstr(y, x, string)
 		self.stdscr.move(oldy, oldx)
-		self.stdscr.refresh()
 	
 	def getKey(self):
 		return self.stdscr.getch()
@@ -30,8 +28,8 @@ class CRT:
 			curses.echo()
 			curses.endwin()
 	
-	def passthru(self):
-		return curses
+	def refresh(self):
+		self.stdscr.refresh()
 
 	kKeyNone	= -1
 	kKeyUp		= 0x103
