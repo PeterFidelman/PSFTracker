@@ -64,7 +64,8 @@ class MainLoop:
 			# if it doesn't use the key, feed it to a global key handler
 			if (key == ord(' ')):
 				self.player._playing = not self.player._playing
-			if (key == ord('q')):
+			if (key == 27):
+				# esc
 				return False
 			if (key == ord('`')):
 				self.activeViewIndex = (self.activeViewIndex + 1) % len(self.views)
@@ -73,122 +74,6 @@ class MainLoop:
 				self.activeViewIndex = (self.activeViewIndex + len(self.views)-1) % len(self.views)
 				self.views[self.activeViewIndex].draw(True)
 		return True
-
-class OrderView:
-	song = None
-	player = None
-	x = 0
-	y = 0
-	h = 0
-	activeChannel = 0
-
-	def __init__(self, song, player, x, y, h):
-		self.song = song
-		self.player = player
-		self.x = x
-		self.y = y
-		self.h = h
-	
-	def draw(self, isActive):
-		(playingOrder, dont_care, dont_care) = self.player.getPosition()
-		first = playingOrder
-		last  = min(first+self.h, self.song.getNumOrders())
-		for order in range(first, last):
-			# Print line number
-			lincrt.printAt(self.x, self.y+order-first, "%02x " % order)
-			# Print order contents
-			orderBytes = self.song.getOrderBytes(order)
-			for channel in range(self.song.getNumChannels()):
-				lincrt.printAt(self.x+3+channel*3, self.y+order-first, 
-						"%02x " % orderBytes[channel])
-		if (last-first) != self.h:
-			for yyy in range((last-first), self.h):
-				lincrt.printAt(self.x, self.y+yyy, ".."+("..."*self.song.getNumChannels()))
-		if (isActive):
-			lincrt.moveTo(self.x+3+self.activeChannel*3, self.y)
-	
-	# returns True if the key was recognized and consumed, otherwise False
-	def signal(self, key):
-		(order, dontCare, dontCare) = self.player.getPosition()
-		if (key == 262):
-			#home == go to start of song
-			self.player.setPosition(0, 0)
-			return True
-		if (key == 360):
-			#end == go to end of song
-			self.player.setPosition(self.song.getNumOrders()-1, 0)
-			return True
-		if (key == 259):
-			#up == go to previous order
-			self.player.setPosition(order-1, 0)
-			return True
-		if (key == 258):
-			#down == go to next order
-			self.player.setPosition(order+1, 0)
-			return True
-		if (key == ord("	")):
-			# tab == go to next channel
-			self.activeChannel = (self.activeChannel + 1) % self.song.getNumChannels()
-			return True
-		if (key == 353):
-			# shift-tab == go to previous channel
-			self.activeChannel = (self.activeChannel + self.song.getNumChannels()-1) % self.song.getNumChannels()
-			return True
-		return False
-
-class InstrView:
-	song = None
-	x = 0
-	y = 0
-	h = 0
-	# The index of the index to draw on the first line (i.e. the scroll
-	# position of the instruments view)
-	first = 0
-
-	def __init__(self, song, x, y, h):
-		self.song = song
-		self.x = x
-		self.y = y
-		self.h = h
-	
-	def draw(self, isActive):
-		#for instr in range(min(self.h, self.song.getNumInstr())):
-		for instr in range(self.first, min(self.h+self.first, self.song.getNumInstr())):
-			lincrt.printAt(0, 0, str(self.first))
-			xx = self.x
-			instrBytes = self.song.getInstrBytes(instr)
-			# Print line number
-			lincrt.printAt(xx, self.y+instr-self.first, "%02x " % instr)
-			xx += 3
-			# Print instrument contents
-			for byteno in range(self.song.kNumBytesInInstr-5):
-				lincrt.printAt(xx, self.y+instr-self.first,
-					"%02x " % instrBytes[byteno])
-				xx+=3
-			# Print instrument name
-			for byteno in range(self.song.kNumBytesInInstr-5,
-						self.song.kNumBytesInInstr):
-				namechr = instrBytes[byteno]
-				namechr = '.' if namechr is 0 else chr(namechr)
-				lincrt.printAt(xx, self.y+instr-self.first, namechr)
-				xx+=1
-		# Fill leftover lines with dots
-		for instr in range(min(self.h, self.song.getNumInstr()), self.h):
-			lincrt.printAt(self.x, self.y+instr-self.first, "."*41)
-		if (isActive):
-			lincrt.moveTo(self.x+3, self.y)
-	
-	# returns True if the key was recognized and consumed, otherwise False
-	def signal(self, key):
-		if (key == 259):
-			#up == go to previous instrument
-			self.first = 0 if self.first == 0 else self.first-1
-			return True
-		if (key == 258):
-			#down == go to next instrument
-			self.first = self.first if self.first >= self.song.getNumInstr()-1 else self.first+1
-			return True
-		return False
 
 class PatternView:
 	song = None
@@ -298,6 +183,121 @@ class PatternView:
 			 11: "B",
 			 None: "."}
 		return notes[note]
+
+class OrderView:
+	song = None
+	player = None
+	x = 0
+	y = 0
+	h = 0
+	activeChannel = 0
+
+	def __init__(self, song, player, x, y, h):
+		self.song = song
+		self.player = player
+		self.x = x
+		self.y = y
+		self.h = h
+	
+	def draw(self, isActive):
+		(playingOrder, dont_care, dont_care) = self.player.getPosition()
+		first = playingOrder
+		last  = min(first+self.h, self.song.getNumOrders())
+		for order in range(first, last):
+			# Print line number
+			lincrt.printAt(self.x, self.y+order-first, "%02x " % order)
+			# Print order contents
+			orderBytes = self.song.getOrderBytes(order)
+			for channel in range(self.song.getNumChannels()):
+				lincrt.printAt(self.x+3+channel*3, self.y+order-first, 
+						"%02x " % orderBytes[channel])
+		if (last-first) != self.h:
+			for yyy in range((last-first), self.h):
+				lincrt.printAt(self.x, self.y+yyy, ".."+("..."*self.song.getNumChannels()))
+		if (isActive):
+			lincrt.moveTo(self.x+3+self.activeChannel*3, self.y)
+	
+	# returns True if the key was recognized and consumed, otherwise False
+	def signal(self, key):
+		(order, dontCare, dontCare) = self.player.getPosition()
+		if (key == 262):
+			#home == go to start of song
+			self.player.setPosition(0, 0)
+			return True
+		if (key == 360):
+			#end == go to end of song
+			self.player.setPosition(self.song.getNumOrders()-1, 0)
+			return True
+		if (key == 259):
+			#up == go to previous order
+			self.player.setPosition(order-1, 0)
+			return True
+		if (key == 258):
+			#down == go to next order
+			self.player.setPosition(order+1, 0)
+			return True
+		if (key == ord("	")) or (key == 261):
+			# tab or right == go to next channel
+			self.activeChannel = (self.activeChannel + 1) % self.song.getNumChannels()
+			return True
+		if (key == 353) or (key == 260):
+			# shift-tab or left == go to previous channel
+			self.activeChannel = (self.activeChannel + self.song.getNumChannels()-1) % self.song.getNumChannels()
+			return True
+		return False
+
+class InstrView:
+	song = None
+	x = 0
+	y = 0
+	h = 0
+	# The index of the instrument to draw on the first line (i.e. the
+	# scroll position of the instruments view)
+	first = 0
+
+	def __init__(self, song, x, y, h):
+		self.song = song
+		self.x = x
+		self.y = y
+		self.h = h
+	
+	def draw(self, isActive):
+		#for instr in range(min(self.h, self.song.getNumInstr())):
+		for instr in range(self.first, min(self.h+self.first, self.song.getNumInstr())):
+			xx = self.x
+			instrBytes = self.song.getInstrBytes(instr)
+			# Print line number
+			lincrt.printAt(xx, self.y+instr-self.first, "%02x " % instr)
+			xx += 3
+			# Print instrument contents
+			for byteno in range(self.song.kNumBytesInInstr-5):
+				lincrt.printAt(xx, self.y+instr-self.first,
+					"%02x " % instrBytes[byteno])
+				xx+=3
+			# Print instrument name
+			for byteno in range(self.song.kNumBytesInInstr-5,
+						self.song.kNumBytesInInstr):
+				namechr = instrBytes[byteno]
+				namechr = '.' if namechr is 0 else chr(namechr)
+				lincrt.printAt(xx, self.y+instr-self.first, namechr)
+				xx+=1
+		# Fill leftover lines with dots
+		for instr in range(min(self.h, self.song.getNumInstr()), self.h):
+			lincrt.printAt(self.x, self.y+instr-self.first, "."*41)
+		if (isActive):
+			lincrt.moveTo(self.x+3, self.y)
+	
+	# returns True if the key was recognized and consumed, otherwise False
+	def signal(self, key):
+		if (key == 259):
+			#up == go to previous instrument
+			self.first = 0 if self.first == 0 else self.first-1
+			return True
+		if (key == 258):
+			#down == go to next instrument
+			self.first = self.first if self.first >= self.song.getNumInstr()-1 else self.first+1
+			return True
+		return False
 
 # Call main
 lincrt = crt.CRT()
