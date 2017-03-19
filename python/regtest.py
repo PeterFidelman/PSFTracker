@@ -96,11 +96,18 @@ def main():
 	newFlag = False
 	newValue = None
 
+	lastKey = None
+
 	while(not quitFlag):
 		printLabels()
 		printRegisters(_registers, curRegister)
 
 		key = lincrt.getKey()
+		# hack: print keycode too :)
+		if key != -1:
+			lastKey = key
+		lincrt.printAt(0, 0, "key code " + str(lastKey) + "     ")
+
 		quitFlag = getQuit(key)
 		curRegister = getNewActiveRegister(key, curRegister)
 		(setRegister, newValue, newFlag) = getNewRegisterValue(

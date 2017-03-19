@@ -40,7 +40,9 @@ class Player:
 		if (self._line >= self._song.kNumLinesInPattern):
 			self._line = 0
 			self._order += 1
-
+		elif (self._line < 0):
+			self._line = self._song.kNumLinesInPattern-1
+			self._order -= 1
 		if (self._order >= self._song.getNumOrders()):
 			self._order = 0
 		elif (self._order < 0):
