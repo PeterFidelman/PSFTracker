@@ -52,6 +52,12 @@ class Player:
 	# play a tick
 	def tick(self):
 		if not self._playing:
+			# turn off all the notes
+			linebytes = bytearray([0xff, 0x00, 0x00, 0x00])
+			for ch in range(self._song.getNumChannels()-1,
+					-1, -1):
+				self.applyNote(ch, linebytes)
+			self.commitVRegs(ch)
 			return
 
 		# Time to grab a line?
