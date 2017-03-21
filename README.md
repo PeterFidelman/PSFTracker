@@ -28,8 +28,9 @@ The following is a YouTube video:  click to play.
 ## Installation
 
 ### Dependencies
-#### pyaudio (>= 0.2.8)
-If you are lucky you will be able to simply run `apt-get install python-pyaudio`.  If that doesn't work, try manually retrieving and installing the package from [its PyPi project page](https://pypi.python.org/pypi/PyAudio/).
+#### pyalsaaudio
+https://github.com/larsimmisch/pyalsaaudio/
+    pip install pyalsaaudio
 
 #### pyopl (>= 1.3)
 This isn't in any distro, as far as I know.  Fortunately, it has absolutely no dependencies so it is simple to install  from its [PyPi project page](https://pypi.python.org/pypi/PyOPL/1.3).
