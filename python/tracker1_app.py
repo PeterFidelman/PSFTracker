@@ -4,6 +4,8 @@ import player1
 import song1
 import sys		# for argv
 
+lastInstr = None
+
 def main():
 	# set up the song and the means to play it
 	opl = opl2.OPL2()
@@ -118,7 +120,7 @@ class PatternView:
 				(3, "Volume"),
 				(5, "Effect"),
 				(6, "Param")]
-	           
+
 	activeChannel = 0
 	activeColumnIndex = 0
 	octave = 3
@@ -171,6 +173,7 @@ class PatternView:
 
 	# returns True if the key was recognized and consumed, otherwise False
 	def signal(self, key):
+		global lastInstr
 		(order, line, position) = self.player.getPosition()
 
 		if (self.activeColumnIndex == 0):
@@ -184,6 +187,7 @@ class PatternView:
 					octave = None
 				else:
 					(note, octave) = retval
+					instr = lastInstr	# use instrument from instrument view
 				lineBytes = self.song.packLine(note, octave, volume, instr, command, param)
 				self.song.setPatternLineBytes(order, line, self.activeChannel, lineBytes)
 				return True
@@ -466,14 +470,16 @@ class InstrView:
 	
 	# returns True if the key was recognized and consumed, otherwise False
 	def signal(self, key):
-
+		global lastInstr
 		if (key == 259):
 			#up == go to previous instrument
 			self.first = 0 if self.first == 0 else self.first-1
+			lastInstr = self.first
 			return True
 		if (key == 258):
 			#down == go to next instrument
 			self.first = self.first if self.first >= self.song.getNumInstr()-1 else self.first+1
+			lastInstr = self.first
 			return True
 		if (key == ord("	")) or (key == 261):
 			# tab or right == go to next byte
